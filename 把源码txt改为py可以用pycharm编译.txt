@@ -1,0 +1,225 @@
+# -*- coding = utf-8 -*-
+# @Time:  8:52
+# @Author:江
+# @File：03_云课堂.py
+# @Software: PyCharm
+
+# 导入模块
+import time
+import requests
+from lxml import etree
+import re
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+学习资料发表评论+点赞：
+   course_id                     个人id（点赞所需携带参数），这里暂且叫自己的题目id
+   type_id                       所有页数
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+def get_study(course_id, type_id):
+    publishURL = 'http://gxic.itolearn.com/webios/addComment'               # 学习资料发表内容URL（例如：已阅读）
+    studyURL = 'http://gxic.itolearn.com/Weixin/getDiscussionContent'       # 学习资料（携带参数页数 page 数量 pageSize）
+    agreeURL = 'http://gxic.itolearn.com/webios/addAppreciation'            # 学习资料点赞URL
+    data = {
+        'content': "已阅读",                                                 # 发表内容
+        'id': course_id                                                     # 个人id（点赞所需携带参数），这里暂且叫自己的题目id
+    }
+    session.post(url=publishURL, headers=headers, data=data)                # 发表评论
+
+    for pages in range(1, int(type_id) + 1):                                # 翻页
+        study_data = {
+            'id': course_id,                                                # 个人题目id
+            'page': pages,                                                  # 页数
+            'pageSize': 10,                                                 # 获取条数
+        }
+        agree_page = session.get(url=studyURL, headers=headers, data=study_data).json()  # 获取所有人的点赞id
+        # 每次页面都需点赞，开始点赞
+        for list_all in agree_page['list']:                                 # 循环所有数据
+            dcid = list_all['DiscussionContent']['DC_ID']                   # 点赞id
+            name = list_all['OperName']                                     # 名字
+            agree_data = {
+                'dcid': dcid,
+                'ica_type': type_id,
+                'type': '1',
+            }
+            session.post(url=agreeURL, headers=headers, data=agree_data)    # 点赞
+    print('学习资料点赞成功！')
+
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+获取 token 值并嵌入请求头中，用于验证
+    question_headers            UA 伪装
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+def token():
+    headers_url = 'http://gxic.itolearn.com/File/GetFileServerPara'     # 拿到headers里面的token(一句话问答中要使用)
+    data = {}
+    headers_data = session.post(url=headers_url, data=data, headers=headers).json()      # 请求拿到所有 json 数据
+    token = headers_data['token']                                       # 拿到 token 值
+    question_headers = {
+        'token': token,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.87 Safari/537.36'
+    }
+    return question_headers
+
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+一句话问答点赞+收藏：
+   icid                          学生id（用于请求课程页面所携带参数）
+   tackid                        题目ID
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+def get_data(icid, tackid):
+    token_headers = token()                                             # 请求头
+    question_url = 'http://gxic.itolearn.com/api/iCActivities'          # 题目页面（已回答后的）
+    question_data = {
+        'icid': icid,                                                   # 学生id
+        'taskIcaID': tackid,                                            # 题目ID
+    }
+    answer_question = session.get(url=question_url, params=question_data, headers=token_headers).json()
+
+    get_url = 'http://gxic.itolearn.com/webios/Result'                # 一句话问答点赞url
+    collect_url = 'http://gxic.itolearn.com/HomeNote/InsertNoteHome'  # 一句话问答收藏url
+    for li in answer_question['data']['list']:                        # 循环所有数据（json）
+        all_id = li['partake']['AP_ID']                               # 个人id，请求携带不同的id可以实现点赞+收藏功能
+        name = li['OperName']                                         # 名字
+        ica_id = li['partake']['ICA_ID']                              # 个人id，请求携带不同的id可以实现点赞+收藏功能
+        get_payload = {
+            'apIDList': all_id,
+            'icAID': ica_id,
+            'type': '1'
+        }
+        session.post(url=get_url, data=get_payload)  # 点赞
+        collect_payload = {
+            'AP_ID': all_id,
+            'type': 3
+        }
+        session.post(url=collect_url, data=collect_payload)  # 收藏
+    print('一句话问答点赞+收藏成功！')
+
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+做笔记：
+   icid                          学生id（用于请求课程页面所携带参数）
+   user_id                       笔记id
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+def notes(ic_id):
+    useId_url = 'http://gxic.itolearn.com/Weixin/getNoteData'
+    data = {
+        'IC_ID': ic_id
+    }
+    notes_page = session.post(url=useId_url, data=data, headers=headers).json()
+    if notes_page['schduleNote']:
+        userId = notes_page['schduleNote']['OperatorId']
+        for n in range(0, 5):
+            notes_url = 'http://gxic.itolearn.com/HomeNote/AddAnsterNote'           # 笔记url
+            notes_params = {
+                'ID': '0',
+                'fileID': '[]',
+                'userId': userId,
+                'Content': "笔记",
+                'IC_ID': ic_id
+            }
+            session.post(url=notes_url, data=notes_params)
+        print('做笔记完成！')
+    else:
+        print('该课没有签到！')
+
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+                                                  程序入口
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+if __name__ == '__main__':
+    time_str = time.strftime('%Y-%m-%d %H:%M:%S ', time.localtime(time.time()))
+    print('当前时间: '+time_str)
+    print('作者: 江')
+    print('Software: PyCharm')
+    print('邮箱: ymzdjiang@qq.com')
+    # UA伪装
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.87 Safari/537.36'
+    }
+    # 保持会话
+    session = requests.Session()
+
+    '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+    1、登录保持会话  session
+        code           云课堂账号
+        pwd            云课堂密码
+    '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+    loginURL = "http://gxic.itolearn.com/Account/LoginProcess"  # 登录页面
+    code = input('请输入账号：')
+    pwd = input('请输入密码：')
+    loginData = {'code': code, 'pwd': pwd}  # 登录所需参数（账号，密码）
+    success_page = session.post(url=loginURL, headers=headers, data=loginData)  # 登录，保持会话
+    success_json = success_page.json()
+    success = success_json['success']
+    if not success:
+        print('账号或密码错误！请关闭重新启动！')
+    else:
+        '''
+           2、进去课堂，获取相应(周数主页，课程主页)所需携带参数
+               week                  当前周数
+               lessonname            课程名
+               lsessionid            课程id（用于请求课程页面所携带参数）
+               scheduleid            学校id（用于请求课程页面所携带参数）
+               icid                  学生id（用于请求课程页面所携带参数）
+        '''
+        weekURL = 'http://gxic.itolearn.com/Weixin/Schedule'                        # 当前周数主页
+        weekPage = session.get(url=weekURL, headers=headers)                        # 请求当前周页面
+        week = re.findall('<time id="weekNumber">(\d+)</time>', weekPage.text)[0]   # 正则查找当前周数
+        print('当前周数为：第 ' + week + ' 周')
+        homeURL = 'http://gxic.itolearn.com/WeiXin/partialSchedule'                 # 所有周数主页(需携带相应周数 weekStr）
+        while True:
+            try:
+                weekNum = input('请输入周数：')                                       # 输入周数，用于下面 homeData 携带参数
+                if int(weekNum) <= 0:
+                    print('没有负的周数！请重新输入！')
+                elif int(weekNum) > int(week):
+                    print('还没到该周数！请重新输入！')
+                elif 0 < int(weekNum) <= int(week):
+                    weekNum = weekNum
+                    break
+            except ValueError:
+                print('输入不规范！请重新输入！')
+        homeData = {'weekStr': weekNum}                                             # 周数
+        homePage = session.post(url=homeURL, headers=headers, data=homeData)        # 请求网页，保持会话
+        homePageText = etree.HTML(homePage.text)                                    # 解析网页
+        lessonname = homePageText.xpath('//table/tr/td/a/span/span[1]/text()')      # 正则查找课程名
+        lessionid = re.findall('lessionid=(\d+)', homePage.text)                    # 正则查找课程id
+        scheduleid = re.findall('scheduleid=(\d+)', homePage.text)                  # 正则查找学校id
+        icid = re.findall('icid=(\d+)', homePage.text)                              # 正则查找学生id
+
+        '''
+        3、进入课程页面
+           item['ID']              题目id 
+           item['typeName']        类型(学习资料，测试，一句话问答...)
+           item['courseElmentId']  换页参数id
+           item['typeId']          所有页数
+           item['courseElmentId']  个人id（点赞所需携带参数），这里暂且叫自己的题目id
+           list['DiscussionContent']['DC_ID']       点赞所需参数，是全班人的id，请求每一个人的id实现点赞
+           list['OperName']        每一个人的名字
+        '''
+        lessonURL = 'http://gxic.itolearn.com/Weixin/InteractiveClassroom?'  # 课程主页（默认打开课堂活动）
+        pageURL = 'http://gxic.itolearn.com/Weixin/partialItemClassJson'     # 课堂题目(json)
+        for i in range(len(icid)):
+            lessonUrl = lessonURL + f'lessionid={lessionid[i]}&scheduleid={scheduleid[i]}&icid={icid[i]}'   # 课程页面
+            session.get(url=lessonUrl, headers=headers)     # 请求课程页面，保持会话
+            print('\n')
+            print('上课地址：' + lessonUrl)
+            notes(icid[i])                                  # 做笔记
+            for n in range(1, 4):
+                pageData = {
+                    'applayType': n,                        # 页面 1：课前活动 2：课中活动  3：课后活动
+                    'ic_id': icid[i],                       # 学生id
+                    'lessionid': lessionid[i],              # 课程id
+                    'schduleid': scheduleid[i]              # 学校id
+                }
+                page = session.post(url=pageURL, headers=headers, data=pageData).json()         # 获取该页所有题目（json）
+                for item in page['items']:                  # 循环所有题目
+                    if item['typeName'] == '学习资料':       # 题目类型为 “学习资料” 时执行
+                        get_study(item['courseElmentId'], item['typeId'])           # 点赞
+                    if item['typeName'] == '一句话问答':
+                        get_data(icid[i], item['ID'])                               # 点赞+收藏
+
+
+
+
+
